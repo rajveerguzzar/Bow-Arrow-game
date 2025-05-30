@@ -4,14 +4,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Arrow GAme</title>
+  <title>Arrow Game</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/1.19.1/TweenMax.min.js"></script>
   <script src="//s3-us-west-2.amazonaws.com/s.cdpn.io/16327/MorphSVGPlugin.min.js"></script>
   <style>
     body {
       margin: 0;
       background: #222;
-
       margin: 20px;
     }
 
@@ -76,28 +75,18 @@
       <path d="M537 118L487 118 485 160 515 162 509 177 482 171 482 193 529 199 538 148 501 146 508 133 537 137" />
       <path d="M540 202L543 178 570 186 569 168 544 167 546 122 590 116 586 142 561 140 560 152 586 153 586 205" />
       <path d="M630 120 L650 160 L670 120 L690 120 L660 170 L660 200 L640 200 L640 170 L610 120 Z" />
-      <!-- o -->
       <path d="M700 160 A20 20 0 1 1 699.9 160" />
-      <!-- u -->
       <path d="M730 140 L730 180 A20 20 0 0 0 770 180 L770 140 L750 140 L750 180 A5 5 0 0 1 750 180 L750 140 Z" />
-      <!-- ! moved -->
       <path d="M790 150 L790 180 L810 180 L810 100 Z M790 200 L810 200 L810 220 L790 220 Z" />
     </g>
 
     <g class="loveyou" fill="#F4531C" opacity="0" transform="translate(300, 100)">
-      <!-- L -->
       <path d="M0 0 L0 80 L30 80 L30 70 L10 70 L10 0 Z" />
-      <!-- O -->
       <path d="M50 40 A20 20 0 1 1 49.9 40" />
-      <!-- V -->
       <path d="M80 0 L100 80 L120 0 L110 0 L100 60 L90 0 Z" />
-      <!-- E -->
       <path d="M140 0 L140 80 L170 80 L170 70 L150 70 L150 50 L170 50 L170 40 L150 40 L150 10 L170 10 L170 0 Z" />
-      <!-- Y -->
       <path d="M190 0 L205 30 L220 0 L230 0 L210 40 L210 80 L200 80 L200 40 L180 0 Z" />
-      <!-- O -->
       <path d="M250 40 A20 20 0 1 1 249.9 40" />
-      <!-- U -->
       <path d="M280 0 L280 50 A20 20 0 0 0 320 50 L320 0 L310 0 L310 50 A10 10 0 0 1 290 50 L290 0 Z" />
     </g>
     <g class="hit" fill="#ffcc00" opacity="0" transform="translate(180, -80) rotate(12) ">
@@ -123,18 +112,36 @@
     };
     let pivot = { x: 100, y: 250 }; // bow rotation point
     aim({ clientX: 320, clientY: 300 }); // set up start drag event
-    window.addEventListener("mousedown", draw);
+
+    // Use 'pointerdown' for broader compatibility with both mouse and touch
+    window.addEventListener("pointerdown", draw);
+
     function draw(e) { // pull back arrow
+      // Prevent default touch behavior (like scrolling)
+      e.preventDefault();
+
       randomAngle = Math.random() * Math.PI * 0.03 - 0.015;
       TweenMax.to(".arrow-angle use", 0.3, { opacity: 1 });
-      window.addEventListener("mousemove", aim);
-      window.addEventListener("mouseup", loose);
+
+      // Use 'pointermove' and 'pointerup' for broader compatibility
+      window.addEventListener("pointermove", aim);
+      window.addEventListener("pointerup", loose);
       aim(e);
     }
 
     function aim(e) {
+      // Get mouse or touch position
+      let clientX, clientY;
+      if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+
       // get mouse position in relation to svg position and scale
-      var point = getMouseSVG(e);
+      var point = getMouseSVG({ clientX, clientY });
       point.x = Math.min(point.x, pivot.x - 7);
       point.y = Math.max(point.y, pivot.y + 7);
       var dx = point.x - pivot.x;
@@ -191,12 +198,11 @@
     }
 
     function loose() {
-      shootSound.currentTime = 0;  // rewind to start
+      shootSound.currentTime = 0;   // rewind to start
       shootSound.play()
       // release arrow
-      window.removeEventListener("mousemove", aim);
-      window.removeEventListener("mouseup", loose);
-      ;
+      window.removeEventListener("pointermove", aim);
+      window.removeEventListener("pointerup", loose);
 
 
       TweenMax.to("#bow", 0.4, {
