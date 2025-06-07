@@ -24,6 +24,7 @@
       position: fixed;
       top: 0;
       left: 0;
+      /* Crucial: Prevents default browser touch actions (like scrolling/zooming) that can interfere */
       touch-action: none;
     }
 
@@ -39,7 +40,7 @@
 
     .app-footer {
       position: fixed;
-      bottom: 100px;
+      bottom: 30px;
       left: 0;
       right: 0;
       text-align: center;
@@ -64,14 +65,94 @@
     .app-footer .coffee-icon {
       position: inherit;
       font-size: 18px;
-      color: rgba(255, 255, 255, 0.8);
+      color: rgba(255, 255, 255);
       line-height: 1;
       transform: translateY(1px);
+    }
+
+    /* Rotate Device Message Styles */
+    .rotate-device-message {
+      display: none;
+      /* Hidden by default */
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(0, 0, 0, 0.95);
+      /* Darker overlay */
+      color: white;
+      z-index: 9999;
+      /* Ensure it's on top of everything */
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      font-family: 'Poppins', sans-serif;
+      font-size: 20px;
+      padding: 20px;
+      box-sizing: border-box;
+      /* Include padding in width/height */
+    }
+
+    .rotate-device-message p {
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    .rotate-device-message .rotate-icon {
+      font-size: 80px;
+      margin-top: 0;
+      color: white;
+      animation: rotateHint 1.5s infinite ease-in-out;
+      transform: rotate(0deg);
+      /* Initial state for animation */
+    }
+
+    @keyframes rotateHint {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      50% {
+        transform: rotate(90deg);
+      }
+
+      100% {
+        transform: rotate(0deg);
+      }
+    }
+
+    /* Media query to display the message only in portrait mode */
+    @media (orientation: portrait) {
+      .rotate-device-message {
+        display: flex;
+        /* Show the overlay */
+      }
+
+      /* Hide other game elements when in portrait mode */
+      body>*:not(.rotate-device-message) {
+        display: none;
+      }
+    }
+
+    /* Remove transform-origin from CSS for #bow. GSAP will handle it with svgOrigin */
+    #bow {
+      fill: none;
+      stroke-linecap: round;
+      vector-effect: non-scaling-stroke;
+      pointer-events: none;
+      /* transform-origin: 100px 250px; <-- REMOVED */
     }
   </style>
 </head>
 
 <body>
+  <div class="rotate-device-message">
+    <p>Please rotate your device to landscape mode to play.</p>
+    <span class="material-symbols-outlined rotate-icon">screen_rotation</span>
+  </div>
+
   <svg id="game" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 400" overflow="visible">
     <linearGradient id="ArcGradient">
       <stop offset="0" stop-color="#fff" stop-opacity=".2" />
@@ -145,7 +226,7 @@
   </footer>
 
   <script>
-    const shootSound = new Audio('assets/arrow-shoot.mp3');
+    const shootSound = new Audio('assets/arrow-shoot.mp3'); // Make sure this path is correct!
     var svg = document.querySelector("svg");
     var cursor = svg.createSVGPoint();
     var arrows = document.querySelector(".arrows");
@@ -154,50 +235,81 @@
     let lineSegment = {
       x1: 875, y1: 280, x2: 925, y2: 220
     };
+    // The pivot point for the bow string and arrow nock in SVG viewBox coordinates
     let pivot = { x: 100, y: 250 };
+
+    // Initial setup for the bow and arrow to place them correctly on load
     aim({ clientX: 320, clientY: 300 });
     window.addEventListener("pointerdown", draw);
 
+    // Attempt to lock screen orientation to landscape on load (best effort)
+    // This API's support and requirements (like user gesture or fullscreen) vary by browser.
+    window.addEventListener('load', () => {
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch((error) => {
+          console.warn('Could not lock to landscape:', error);
+          // No direct visual feedback needed here as the CSS media query handles the fallback.
+        });
+      } else if (screen.lockOrientation) { // Deprecated but included for older browsers
+        screen.lockOrientation('landscape');
+      }
+    });
+
     function draw(e) {
       e.preventDefault();
+      // Introduce a slight random angle for more realistic shots
       randomAngle = Math.random() * Math.PI * 0.03 - 0.015;
       TweenMax.to(".arrow-angle use", 0.3, { opacity: 1 });
       window.addEventListener("pointermove", aim);
       svg.addEventListener("pointerup", loose);
-      aim(e);
+      aim(e); // Call aim immediately for initial positioning
     }
 
     function aim(e) {
       let clientX = e.clientX;
       let clientY = e.clientY;
       var point = getMouseSVG({ clientX, clientY });
+
+      // Constrain the aiming point to prevent pulling too far or in wrong directions
       point.x = Math.min(point.x, pivot.x - 7);
       point.y = Math.max(point.y, pivot.y + 7);
+
       var dx = point.x - pivot.x;
       var dy = point.y - pivot.y;
+
       var angle = Math.atan2(dy, dx) + randomAngle;
-      var bowAngle = angle - Math.PI;
-      var distance = Math.min(Math.sqrt(dx * dx + dy * dy), 50);
-      var scale = Math.min(Math.max(distance / 30, 1), 2);
+      var bowAngle = angle - Math.PI; // Adjust angle for bow's visual orientation
+
+      // Calculate distance to determine bow pull and scale
+      var distance = Math.min(Math.sqrt(dx * dx + dy * dy), 50); // Max pull distance
+      var scale = Math.min(Math.max(distance / 30, 1), 2); // Scale based on pull
+
+      // Animate the bow's scale and rotation
       TweenMax.to("#bow", 0.3, {
         scaleX: scale,
         rotation: bowAngle + "rad",
-        transformOrigin: "right center"
+        // **** IMPORTANT CHANGE HERE: Use svgOrigin for SVG elements ****
+        svgOrigin: "100 250" // Directly corresponds to pivot.x pivot.y in viewBox coords
       });
-      var arrowX = Math.min(pivot.x - (1 / scale) * distance, 88);
+
+      // Animate arrow position and rotation
       TweenMax.to(".arrow-angle", 0.3, {
         rotation: bowAngle + "rad",
-        svgOrigin: "100 250"
+        svgOrigin: "100 250" // Arrow pivots from this point
       });
       TweenMax.to(".arrow-angle use", 0.3, {
-        x: -distance
+        x: -distance // Move arrow back based on pull distance
       });
+
+      // Animate bow string (polyline)
       TweenMax.to("#bow polyline", 0.3, {
         attr: {
           points:
             "88,200 " + Math.min(pivot.x - (1 / scale) * distance, 88) + ",250 88,300"
         }
       });
+
+      // Animate the arc for trajectory preview
       var radius = distance * 9;
       var offset = {
         x: Math.cos(bowAngle) * radius,
@@ -219,7 +331,7 @@
             arcWidth +
             ",50"
         },
-        autoAlpha: distance / 60
+        autoAlpha: distance / 60 // Fade arc in/out based on pull
       });
     }
 
@@ -228,9 +340,12 @@
       shootSound.play();
       window.removeEventListener("pointermove", aim);
       svg.removeEventListener("pointerup", loose);
+
+      // Reset bow to original state
       TweenMax.to("#bow", 0.4, {
         scaleX: 1,
-        transformOrigin: "right center",
+        // **** IMPORTANT CHANGE HERE: Use svgOrigin for SVG elements ****
+        svgOrigin: "100 250",
         ease: Elastic.easeOut
       });
       TweenMax.to("#bow polyline", 0.4, {
@@ -239,48 +354,56 @@
         },
         ease: Elastic.easeOut
       });
+
+      // Create a new arrow element for the shot
       var newArrow = document.createElementNS("http://www.w3.org/2000/svg", "use");
       newArrow.setAttributeNS("http://www.w3.org/1999/xlink", "href", "#arrow");
       arrows.appendChild(newArrow);
+
+      // Get bezier path data from the arc and animate the arrow along it
       var path = MorphSVGPlugin.pathDataToBezier("#arc");
       TweenMax.to([newArrow], 0.5, {
         force3D: true,
         bezier: {
           type: "cubic",
           values: path,
-          autoRotate: ["x", "y", "rotation"]
+          autoRotate: ["x", "y", "rotation"] // Auto-rotate arrow along path
         },
-        onUpdate: hitTest,
+        onUpdate: hitTest, // Check for hit on each animation frame
         onUpdateParams: ["{self}"],
-        onComplete: onMiss,
+        onComplete: onMiss, // If animation completes without hit, it's a miss
         ease: Linear.easeNone
       });
-      TweenMax.to("#arc", 0.3, {
-        opacity: 0
-      });
-      TweenMax.set(".arrow-angle use", {
-        opacity: 0
-      });
+
+      // Hide the arc and the "aiming" arrow
+      TweenMax.to("#arc", 0.3, { opacity: 0 });
+      TweenMax.set(".arrow-angle use", { opacity: 0 });
     }
 
     function hitTest(tween) {
       var arrow = tween.target[0];
       var transform = arrow._gsTransform;
       var radians = (transform.rotation * Math.PI) / 180;
+
+      // Define the arrow's head segment for intersection test
       var arrowSegment = {
         x1: transform.x,
         y1: transform.y,
-        x2: Math.cos(radians) * 60 + transform.x,
+        x2: Math.cos(radians) * 60 + transform.x, // 60 is the length of the arrow
         y2: Math.sin(radians) * 60 + transform.y
       };
+
+      // Check for intersection with the target line segment
       var intersection = getIntersection(arrowSegment, lineSegment);
+
       if (intersection.segment1 && intersection.segment2) {
-        tween.pause();
+        tween.pause(); // Stop the arrow animation on hit
         var dx = intersection.x - target.x;
         var dy = intersection.y - target.y;
         var distance = Math.sqrt(dx * dx + dy * dy);
+
         var selector = ".hit";
-        if (distance < 7) {
+        if (distance < 7) { // Define a "bullseye" radius
           selector = ".loveyou";
         }
         showMessage(selector);
@@ -288,15 +411,17 @@
     }
 
     function onMiss() {
-      showMessage(".missyou");
+      showMessage(".missyou"); // Show "miss" message if arrow completes trajectory
     }
 
     function showMessage(selector) {
+      // Kill any ongoing animations for the message to prevent overlap
       TweenMax.killTweensOf(selector);
       TweenMax.killChildTweensOf(selector);
-      TweenMax.set(selector, {
-        autoAlpha: 1
-      });
+
+      TweenMax.set(selector, { autoAlpha: 1 }); // Make message visible
+
+      // Animate message characters in
       TweenMax.staggerFromTo(
         selector + " path",
         0.5,
@@ -311,6 +436,8 @@
         },
         0.05
       );
+
+      // Animate message characters out after a delay
       TweenMax.staggerTo(
         selector + " path",
         0.3,
@@ -324,22 +451,29 @@
       );
     }
 
+    // Converts mouse/touch coordinates to SVG viewBox coordinates
     function getMouseSVG(e) {
-      const bbox = svg.getBoundingClientRect();
+      const bbox = svg.getBoundingClientRect(); // Bounding box of the SVG element
       const svgX = bbox.left;
       const svgY = bbox.top;
       const svgWidth = bbox.width;
       const svgHeight = bbox.height;
+
       const viewBoxParts = svg.getAttribute('viewBox').split(' ');
       const viewBoxWidth = parseFloat(viewBoxParts[2]);
       const viewBoxHeight = parseFloat(viewBoxParts[3]);
+
+      // Calculate scaling factors
       const scaleX = svgWidth > 0 ? viewBoxWidth / svgWidth : 0;
       const scaleY = svgHeight > 0 ? viewBoxHeight / svgHeight : 0;
+
+      // Apply scaling to client coordinates to get SVG coordinates
       cursor.x = (e.clientX - svgX) * scaleX;
       cursor.y = (e.clientY - svgY) * scaleY;
       return cursor;
     }
 
+    // Utility function to check for line segment intersection
     function getIntersection(segment1, segment2) {
       var dx1 = segment1.x2 - segment1.x1;
       var dy1 = segment1.y2 - segment1.y1;
