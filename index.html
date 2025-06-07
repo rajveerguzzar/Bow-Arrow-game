@@ -11,7 +11,8 @@
     body {
       margin: 0;
       background: #222;
-      margin: 20px;
+      overflow: hidden;
+      /* Prevent scrolling if SVG covers whole screen */
     }
 
     svg {
@@ -20,12 +21,20 @@
       position: fixed;
       top: 0;
       left: 0;
+      touch-action: none;
+      /* Prevents default browser touch gestures (like scrolling/zooming) */
     }
 
     span {
       color: white;
       font-family: sans-serif;
       opacity: .3;
+      position: fixed;
+      /* Keep text visible on top */
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      /* Ensure it's above the SVG */
     }
   </style>
 </head>
@@ -117,31 +126,24 @@
     window.addEventListener("pointerdown", draw);
 
     function draw(e) { // pull back arrow
-      // Prevent default touch behavior (like scrolling)
-      e.preventDefault();
+      e.preventDefault(); // Prevent default touch behavior (like scrolling)
 
       randomAngle = Math.random() * Math.PI * 0.03 - 0.015;
       TweenMax.to(".arrow-angle use", 0.3, { opacity: 1 });
 
-      // Use 'pointermove' and 'pointerup' for broader compatibility
       window.addEventListener("pointermove", aim);
-      window.addEventListener("pointerup", loose);
+      svg.addEventListener("pointerup", loose); // Attached to SVG
       aim(e);
     }
 
     function aim(e) {
-      // Get mouse or touch position
-      let clientX, clientY;
-      if (e.touches && e.touches.length > 0) {
-        clientX = e.touches[0].clientX;
-        clientY = e.touches[0].clientY;
-      } else {
-        clientX = e.clientX;
-        clientY = e.clientY;
-      }
+      // Using e.clientX and e.clientY directly for pointer events (mouse/touch unified)
+      let clientX = e.clientX;
+      let clientY = e.clientY;
 
       // get mouse position in relation to svg position and scale
       var point = getMouseSVG({ clientX, clientY });
+
       point.x = Math.min(point.x, pivot.x - 7);
       point.y = Math.max(point.y, pivot.y + 7);
       var dx = point.x - pivot.x;
@@ -198,11 +200,11 @@
     }
 
     function loose() {
-      shootSound.currentTime = 0;   // rewind to start
+      shootSound.currentTime = 0; // rewind to start
       shootSound.play()
       // release arrow
       window.removeEventListener("pointermove", aim);
-      window.removeEventListener("pointerup", loose);
+      svg.removeEventListener("pointerup", loose); // Removed from SVG
 
 
       TweenMax.to("#bow", 0.4, {
@@ -309,11 +311,28 @@
       );
     }
 
+    // getMouseSVG function (same as previous version)
     function getMouseSVG(e) {
-      // normalize mouse position within svg coordinates
-      cursor.x = e.clientX;
-      cursor.y = e.clientY;
-      return cursor.matrixTransform(svg.getScreenCTM().inverse());
+      const bbox = svg.getBoundingClientRect(); // Get the SVG's position and size in screen coordinates
+      const svgX = bbox.left;
+      const svgY = bbox.top;
+      const svgWidth = bbox.width;
+      const svgHeight = bbox.height;
+
+      // Parse viewBox dimensions
+      const viewBoxParts = svg.getAttribute('viewBox').split(' ');
+      const viewBoxWidth = parseFloat(viewBoxParts[2]);
+      const viewBoxHeight = parseFloat(viewBoxParts[3]);
+
+      // Handle potential division by zero if width/height are 0
+      const scaleX = svgWidth > 0 ? viewBoxWidth / svgWidth : 0;
+      const scaleY = svgHeight > 0 ? viewBoxHeight / svgHeight : 0;
+
+      // Transform client coordinates to SVG viewBox coordinates
+      cursor.x = (e.clientX - svgX) * scaleX;
+      cursor.y = (e.clientY - svgY) * scaleY;
+
+      return cursor;
     }
 
     function getIntersection(segment1, segment2) {
